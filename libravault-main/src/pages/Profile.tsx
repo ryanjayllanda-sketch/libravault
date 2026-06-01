@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { User, Mail, Phone, Lock, Eye, EyeOff, CheckCircle, Loader, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { ROLE_META, normalizeRole } from '../lib/rbac'
 import { useStore } from '../store/useStore'
 
 interface ProfileForm {
@@ -30,38 +29,19 @@ export default function Profile() {
 
   const [avatarUploading, setAvatarUploading] = useState(false)
 
-  useEffect(() => {
+  // FIX: load profile from profiles table (source of truth)
+  const loadProfile = async () => {
     if (!user) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, phone, avatar_url')
+      .eq('id', user.id)
+      .single()
+    if (data) setForm({ full_name: data.full_name ?? '', phone: data.phone ?? '', avatar_url: data.avatar_url ?? '' })
+    setLoadingProfile(false)
+  }
 
-    const fetchProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('full_name, phone, avatar_url, role')
-        .eq('id', user.id)
-        .single()
-
-      if (data) {
-        setForm({
-          full_name: data.full_name ?? '',
-          phone: data.phone ?? '',
-          avatar_url: data.avatar_url ?? '',
-        })
-
-        const profileRole = normalizeRole(data.role)
-        if (profileRole !== role) {
-          setUser(user, profileRole)
-        }
-      }
-
-      if (error && !data) {
-        setProfileError(error.message)
-      }
-
-      setLoadingProfile(false)
-    }
-
-    fetchProfile()
-  }, [user, role, setUser])
+  useEffect(() => { loadProfile() }, [user])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -88,14 +68,30 @@ export default function Profile() {
     setSavingProfile(true)
     try {
       const { error } = await supabase.from('profiles').update({
-        full_name: form.full_name,
-        phone: form.phone,
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim(),
         avatar_url: form.avatar_url,
+        updated_at: new Date().toISOString(),
       }).eq('id', user.id)
       if (error) throw error
-      // Refresh user metadata in store
+
+      // FIX: re-read the saved profile from DB to confirm changes
+      const { data: saved } = await supabase
+        .from('profiles')
+        .select('full_name, phone, avatar_url')
+        .eq('id', user.id)
+        .single()
+      if (saved) setForm({ full_name: saved.full_name ?? '', phone: saved.phone ?? '', avatar_url: saved.avatar_url ?? '' })
+
+      // FIX: update auth user metadata so Navbar picks up the new name
+      await supabase.auth.updateUser({
+        data: { full_name: form.full_name.trim() }
+      })
+
+      // Refresh store user
       const { data: { user: refreshed } } = await supabase.auth.getUser()
       if (refreshed) setUser(refreshed, role)
+
       setProfileDone(true)
       setTimeout(() => setProfileDone(false), 3000)
     } catch (err: unknown) {
@@ -112,7 +108,6 @@ export default function Profile() {
     if (newPw !== confirmPw) { setPwError('Passwords do not match.'); return }
     setSavingPw(true)
     try {
-      // Re-authenticate with current password first
       const { error: signInErr } = await supabase.auth.signInWithPassword({
         email: user?.email ?? '',
         password: currentPw,
@@ -180,7 +175,7 @@ export default function Profile() {
                 <div>
                   <p style={{ fontWeight: 600, fontSize: 16 }}>{form.full_name || 'No name set'}</p>
                   <p style={{ color: 'var(--gray-400)', fontSize: 14 }}>{user.email}</p>
-                  <p style={{ color: 'var(--gray-400)', fontSize: 12, marginTop: 2 }}>Role: {ROLE_META[role].label}</p>
+                  <p style={{ color: 'var(--gray-400)', fontSize: 12, marginTop: 2, textTransform: 'capitalize' }}>Role: {role}</p>
                 </div>
               </div>
 

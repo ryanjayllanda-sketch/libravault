@@ -10,25 +10,20 @@ export async function updateProduct(id: number, data: Record<string, unknown>) {
   if (error) throw error
 }
 export async function deleteProduct(id: number) {
-  // Try hard delete first — only works if no orders reference this product
   const { error } = await supabase.from('products').delete().eq('id', id)
   if (error) {
-    // Foreign key constraint — product is referenced by an order
-    // Fall back to soft delete (hide from store)
     if (error.code === '23503' || error.message.includes('foreign key')) {
       const { error: softErr } = await supabase
         .from('products')
         .update({ is_active: false })
         .eq('id', id)
       if (softErr) throw softErr
-      // Throw a friendly message so UI can show it
       throw new Error('Product was deactivated (it has existing orders so it can\'t be fully deleted)')
     }
     throw error
   }
 }
 
-// Submit review — first ensures profile exists to avoid FK error
 export async function submitReview(data: {
   product_id: number
   user_id: string
@@ -36,7 +31,6 @@ export async function submitReview(data: {
   title: string
   body: string
 }) {
-  // Make sure profile exists (fixes "reviews_user_id_fkey" violation)
   const { data: userRes } = await supabase.auth.getUser()
   if (userRes.user) {
     await supabase.from('profiles').upsert(
@@ -53,7 +47,6 @@ export async function deleteReview(id: number) {
   if (error) throw error
 }
 
-// ── Addresses ────────────────────────────────────────────────
 export async function saveAddress(userId: string, address: Omit<DeliveryAddress, 'id'>) {
   const { data, error } = await supabase
     .from('addresses')
@@ -86,7 +79,6 @@ export async function setDefaultAddress(userId: string, addressId: string) {
   if (error) throw error
 }
 
-// Get user's default address (used to pre-fill checkout)
 export async function getDefaultAddress(userId: string): Promise<DeliveryAddress | null> {
   const { data } = await supabase
     .from('addresses')
@@ -110,7 +102,6 @@ export async function getDefaultAddress(userId: string): Promise<DeliveryAddress
   }
 }
 
-// ── Wishlist ─────────────────────────────────────────────────
 export async function addToWishlist(userId: string, productId: number) {
   const { error } = await supabase.from('wishlists').upsert([{ user_id: userId, product_id: productId }], { onConflict: 'user_id,product_id' })
   if (error) throw error
@@ -127,7 +118,6 @@ export async function fetchWishlist(userId: string): Promise<number[]> {
   return (data ?? []).map((r: any) => r.product_id)
 }
 
-// ── ACID Order Placement (via SQL function) ──────────────────
 export async function placeOrder(params: {
   userId: string
   addressId: string
@@ -138,13 +128,12 @@ export async function placeOrder(params: {
   tax: number
   total: number
 }): Promise<string> {
-  // Use the atomic place_order() SQL function — entire order is one transaction
   const { data, error } = await supabase.rpc('place_order', {
     p_address_id: params.addressId,
     p_payment_method: params.paymentMethod,
     p_items: params.cart.map((item) => ({
       product_id: item.product.id,
-      edition: item.size,   // item.size holds the edition number (1=Paperback, 2=Hardcover, 3=eBook, 4=Audiobook)
+      edition: item.size,
       qty: item.qty,
       unit_price: item.product.sale_price ?? item.product.price,
     })),
@@ -153,7 +142,6 @@ export async function placeOrder(params: {
     p_tax: params.tax,
     p_total: params.total,
   })
-
   if (error) throw error
   return `#${String(data).slice(0, 8).toUpperCase()}`
 }
@@ -163,22 +151,29 @@ export async function updateOrderStatus(rawId: string, status: string) {
   if (error) throw error
 }
 
+// FIX: updateUserRole now uses an RPC function to bypass RLS restrictions
 export async function updateUserRole(userId: string, role: string) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ role, updated_at: new Date().toISOString() })
-    .eq('id', userId)
-    .select('id, role')
-  if (error) throw error
-  if (!data || data.length === 0) {
-    throw new Error('Role update was blocked by the database. Run the fix_rls_policies.sql in your Supabase SQL Editor first.')
+  // Try RPC first (bypasses RLS if the SQL function has SECURITY DEFINER)
+  const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
+    p_user_id: userId,
+    p_role: role,
+  })
+
+  if (rpcError) {
+    // Fallback: direct update (works if RLS policy allows it)
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .select('id, role')
+    if (error) throw error
+    if (!data || data.length === 0) {
+      throw new Error('Role update was blocked. Please run the fix_rls_policies.sql in your Supabase SQL Editor.')
+    }
   }
 }
 
-
-// Restock a product (add to current stock)
 export async function restockProduct(id: number, qty: number) {
-  // Fetch current stock, then update
   const { data: current, error: fetchErr } = await supabase
     .from('products')
     .select('stock')
@@ -192,11 +187,8 @@ export async function restockProduct(id: number, qty: number) {
   if (error) throw error
 }
 
+export interface SizeStock { size: number; stock: number }
 
-// ── Per-edition stock management (1=Paperback, 2=Hardcover, 3=eBook, 4=Audiobook) ──────
-export interface SizeStock { size: number; stock: number }  // size field holds edition number
-
-// Sync sizes & stock via the SQL function (atomic)
 export async function syncProductSizes(productId: number, sizeStocks: SizeStock[]) {
   const { error } = await supabase.rpc('sync_product_sizes', {
     p_product_id: productId,
@@ -205,7 +197,6 @@ export async function syncProductSizes(productId: number, sizeStocks: SizeStock[
   if (error) throw error
 }
 
-// Fetch per-size stock for a product
 export async function fetchProductSizes(productId: number): Promise<SizeStock[]> {
   const { data, error } = await supabase
     .from('product_editions')
@@ -216,7 +207,6 @@ export async function fetchProductSizes(productId: number): Promise<SizeStock[]>
   return (data ?? []).map((r: any) => ({ size: Number(r.edition), stock: Number(r.stock) }))
 }
 
-// Create product + initialize sizes
 export async function createProductWithSizes(
   data: Record<string, unknown>,
   sizeStocks: SizeStock[]
