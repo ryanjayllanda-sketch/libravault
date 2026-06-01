@@ -178,13 +178,10 @@ export function useAdminOrders() {
   }, [])
 }
 
-// Admin: all users
+// Admin: all users (uses SECURITY DEFINER RPC to bypass RLS)
 export function useAdminUsers() {
   return useAsync<any[]>(async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const { data, error } = await supabase.rpc('get_all_profiles')
     if (error) throw error
     return data ?? []
   }, [])
