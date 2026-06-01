@@ -78,27 +78,23 @@ export default function App() {
       const cachedRole = getCachedRole(session.user.id)
       if (cachedRole) {
         setUser(session.user, cachedRole)
-        // Refresh in background to catch role changes
-        supabase.from('profiles').select('role').eq('id', session.user.id).single()
-          .then(({ data }) => {
-            const role = (data?.role as Role) ?? 'customer'
-            if (role !== cachedRole) {
-              setCachedRole(session.user.id, role)
-              setUser(session.user, role)
-            }
-          })
-        return
       }
 
-      // 2) No cache — fetch from DB
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single()
-      const role = (data?.role as Role) ?? 'customer'
-      setCachedRole(session.user.id, role)
-      setUser(session.user, role)
+      // Fetch the current role from the DB and update the store.
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+
+        const role = (data?.role as Role) ?? 'customer'
+        setCachedRole(session.user.id, role)
+        setUser(session.user, role)
+      } catch {
+        // Keep the cached role if the DB lookup fails.
+        if (!cachedRole) setUser(session.user, 'customer')
+      }
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
