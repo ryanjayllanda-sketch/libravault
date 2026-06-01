@@ -44,28 +44,9 @@ function StoreLayout({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Cache role in localStorage so we don't re-fetch on every page load
-const ROLE_CACHE_KEY = 'libravault-role-cache'
-
-function getCachedRole(userId: string): Role | null {
-  try {
-    const cached = localStorage.getItem(ROLE_CACHE_KEY)
-    if (!cached) return null
-    const { id, role, ts } = JSON.parse(cached)
-    // Cache valid for 1 hour
-    if (id === userId && Date.now() - ts < 3600_000) return role as Role
-    return null
-  } catch { return null }
-}
-
-function setCachedRole(userId: string, role: Role) {
-  try {
-    localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({ id: userId, role, ts: Date.now() }))
-  } catch { /* ignore */ }
-}
 
 export default function App() {
-  const { setUser, setAuthLoading } = useStore()
+  const { setUser } = useStore()
 
   useEffect(() => {
     const resolveUserAndRole = async (session: any) => {
@@ -74,13 +55,6 @@ export default function App() {
         return
       }
 
-      // 1) Check cache first — instant, no DB call
-      const cachedRole = getCachedRole(session.user.id)
-      if (cachedRole) {
-        setUser(session.user, cachedRole)
-      }
-
-      // Fetch the current role from the DB and update the store.
       try {
         const { data } = await supabase
           .from('profiles')
@@ -89,11 +63,9 @@ export default function App() {
           .single()
 
         const role = (data?.role as Role) ?? 'customer'
-        setCachedRole(session.user.id, role)
         setUser(session.user, role)
       } catch {
-        // Keep the cached role if the DB lookup fails.
-        if (!cachedRole) setUser(session.user, 'customer')
+        setUser(session.user, 'customer')
       }
     }
 
@@ -103,13 +75,13 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (_event === 'SIGNED_OUT') localStorage.removeItem(ROLE_CACHE_KEY)
+        if (_event === 'SIGNED_OUT') setUser(null, 'customer')
         resolveUserAndRole(session)
       }
     )
 
     return () => subscription.unsubscribe()
-  }, [setUser, setAuthLoading])
+  }, [setUser])
 
   return (
     <BrowserRouter>

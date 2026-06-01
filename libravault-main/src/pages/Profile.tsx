@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { User, Mail, Phone, Lock, Eye, EyeOff, CheckCircle, Loader, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import type { Role } from '../lib/rbac'
 import { useStore } from '../store/useStore'
 
 interface ProfileForm {
@@ -31,12 +32,35 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) return
-    supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single()
-      .then(({ data }) => {
-        if (data) setForm({ full_name: data.full_name ?? '', phone: data.phone ?? '', avatar_url: data.avatar_url ?? '' })
-        setLoadingProfile(false)
-      })
-  }, [user])
+
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name, phone, avatar_url, role')
+        .eq('id', user.id)
+        .single()
+
+      if (data) {
+        setForm({
+          full_name: data.full_name ?? '',
+          phone: data.phone ?? '',
+          avatar_url: data.avatar_url ?? '',
+        })
+
+        if (data.role && data.role !== role) {
+          setUser(user, data.role as Role)
+        }
+      }
+
+      if (error && !data) {
+        setProfileError(error.message)
+      }
+
+      setLoadingProfile(false)
+    }
+
+    fetchProfile()
+  }, [user, role, setUser])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
