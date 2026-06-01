@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { useStore } from './store/useStore'
-import type { Role } from './lib/rbac'
+import { fetchProfileRole } from './lib/profileRole'
+import { normalizeRole } from './lib/rbac'
 import { RequireAuth, RequireAdmin, AccessDenied } from './components/Guards'
 
 import Navbar from './components/Navbar'
@@ -49,23 +50,39 @@ export default function App() {
   const { setUser } = useStore()
 
   useEffect(() => {
+    let profileChannel: ReturnType<typeof supabase.channel> | null = null
+
+    const watchProfileRole = (user: any) => {
+      if (profileChannel) supabase.removeChannel(profileChannel)
+
+      profileChannel = supabase
+        .channel(`profile-role-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+          (payload) => {
+            setUser(user, normalizeRole(payload.new?.role))
+          }
+        )
+        .subscribe()
+    }
+
     const resolveUserAndRole = async (session: any) => {
       if (!session?.user) {
+        if (profileChannel) {
+          supabase.removeChannel(profileChannel)
+          profileChannel = null
+        }
         setUser(null, 'customer')
         return
       }
 
       try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
-
-        const role = (data?.role as Role) ?? 'customer'
-        setUser(session.user, role)
+        setUser(session.user, await fetchProfileRole(session.user.id))
+        watchProfileRole(session.user)
       } catch {
         setUser(session.user, 'customer')
+        watchProfileRole(session.user)
       }
     }
 
@@ -73,14 +90,30 @@ export default function App() {
       resolveUserAndRole(session)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (_event === 'SIGNED_OUT') setUser(null, 'customer')
         resolveUserAndRole(session)
       }
     )
 
-    return () => subscription.unsubscribe()
+    const refreshRoleOnFocus = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      try {
+        setUser(user, await fetchProfileRole(user.id))
+      } catch {
+        setUser(user, 'customer')
+      }
+    }
+
+    window.addEventListener('focus', refreshRoleOnFocus)
+
+    return () => {
+      authSubscription.unsubscribe()
+      window.removeEventListener('focus', refreshRoleOnFocus)
+      if (profileChannel) supabase.removeChannel(profileChannel)
+    }
   }, [setUser])
 
   return (

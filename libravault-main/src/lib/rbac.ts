@@ -3,6 +3,16 @@ import { LayoutDashboard, Package, ShoppingBag, Users, BarChart2, Shield } from 
 // ── Roles ─────────────────────────────────────────────────────────────────────
 export type Role = 'super_admin' | 'manager' | 'editor' | 'viewer' | 'customer'
 
+export const ROLES = ['super_admin', 'manager', 'editor', 'viewer', 'customer'] as const
+
+export function isRole(value: unknown): value is Role {
+  return typeof value === 'string' && ROLES.includes(value as Role)
+}
+
+export function normalizeRole(value: unknown): Role {
+  return isRole(value) ? value : 'customer'
+}
+
 // ── Permissions ───────────────────────────────────────────────────────────────
 export type Permission =
   | 'admin:access'

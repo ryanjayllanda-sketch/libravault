@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { User, Mail, Phone, Lock, Eye, EyeOff, CheckCircle, Loader, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Role } from '../lib/rbac'
+import { ROLE_META, normalizeRole } from '../lib/rbac'
 import { useStore } from '../store/useStore'
 
 interface ProfileForm {
@@ -47,8 +47,9 @@ export default function Profile() {
           avatar_url: data.avatar_url ?? '',
         })
 
-        if (data.role && data.role !== role) {
-          setUser(user, data.role as Role)
+        const profileRole = normalizeRole(data.role)
+        if (profileRole !== role) {
+          setUser(user, profileRole)
         }
       }
 
@@ -179,7 +180,7 @@ export default function Profile() {
                 <div>
                   <p style={{ fontWeight: 600, fontSize: 16 }}>{form.full_name || 'No name set'}</p>
                   <p style={{ color: 'var(--gray-400)', fontSize: 14 }}>{user.email}</p>
-                  <p style={{ color: 'var(--gray-400)', fontSize: 12, marginTop: 2, textTransform: 'capitalize' }}>Role: {role}</p>
+                  <p style={{ color: 'var(--gray-400)', fontSize: 12, marginTop: 2 }}>Role: {ROLE_META[role].label}</p>
                 </div>
               </div>
 

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import type { Role } from '../../lib/rbac'
+import { fetchProfileRole } from '../../lib/profileRole'
+import { hasPermission } from '../../lib/rbac'
 import { useStore } from '../../store/useStore'
 import './Auth.css'
 
@@ -24,18 +25,11 @@ export default function Login() {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
       if (err) throw err
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
-
-      const userRole = (profile?.role as Role) ?? 'customer'
+      const userRole = await fetchProfileRole(data.user.id)
       setUser(data.user, userRole)
       addToast(`Welcome back!`, 'success')
 
-      const isStaff = ['super_admin', 'manager', 'editor', 'viewer'].includes(userRole)
-      navigate(isStaff ? '/admin' : '/')
+      navigate(hasPermission(userRole, 'admin:access') ? '/admin' : '/')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed. Check your credentials.')
     } finally {

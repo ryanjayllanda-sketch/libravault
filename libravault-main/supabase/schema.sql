@@ -182,12 +182,12 @@ CREATE INDEX idx_wishlists_user_id ON public.wishlists(user_id);
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT AS $$
   SELECT role FROM public.profiles WHERE id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = 'public';
 
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
   SELECT get_user_role() IN ('super_admin','manager','editor','viewer');
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = 'public';
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)

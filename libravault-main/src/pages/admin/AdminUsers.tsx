@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Search, X, Shield, User, ChevronDown, Loader } from 'lucide-react'
 import AdminLayout from './AdminLayout'
 import { Can } from '../../components/Guards'
-import { ROLE_META, canModifyRole } from '../../lib/rbac'
+import { ROLE_META, canModifyRole, normalizeRole } from '../../lib/rbac'
 import { useAdminUsers } from '../../lib/hooks'
 import { updateUserRole } from '../../lib/api'
 import { useStore } from '../../store/useStore'
@@ -17,7 +17,7 @@ function RoleDropdown({ u, currentRole, onchange, saving }: {
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const btnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const userRole = (u.role ?? 'customer') as Role
+  const userRole = normalizeRole(u.role)
 
   const handleOpen = () => {
     if (btnRef.current) {
@@ -83,7 +83,7 @@ export default function AdminUsers() {
       const q = search.toLowerCase()
       items = items.filter((u: any) => u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))
     }
-    if (roleFilter !== 'All') items = items.filter((u: any) => u.role === roleFilter)
+    if (roleFilter !== 'All') items = items.filter((u: any) => normalizeRole(u.role) === roleFilter)
     return items
   }, [users, search, roleFilter])
 
@@ -139,8 +139,8 @@ export default function AdminUsers() {
             </thead>
             <tbody>
               {filtered.map((u: any) => {
-                const userRole = (u.role ?? 'customer') as Role
-                const meta = ROLE_META[userRole] ?? ROLE_META.customer
+                const userRole = normalizeRole(u.role)
+                const meta = ROLE_META[userRole]
                 const canChange = canModifyRole(currentRole, userRole)
                 return (
                   <tr key={u.id}>
