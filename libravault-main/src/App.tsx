@@ -30,6 +30,7 @@ import AdminUsers from './pages/admin/AdminUsers'
 import AdminOrders from './pages/admin/AdminOrders'
 import AdminCustomers from './pages/admin/AdminCustomers'
 import AdminSellers from './pages/admin/AdminSellers'
+import Dashboard from './pages/admin/Dashboard'
 
 import './index.css'
 
@@ -124,14 +125,14 @@ export default function App() {
         <Route path="/reset-password"  element={<ResetPassword />} />
         <Route path="/access-denied"   element={<StoreLayout><AccessDenied fullPage /></StoreLayout>} />
 
-        <Route path="/admin"           element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
+        <Route path="/admin"           element={<RequireAdmin><Dashboard /></RequireAdmin>} />
         <Route path="/admin/users"     element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
         <Route path="/admin/orders"    element={<RequireAdmin><AdminOrders /></RequireAdmin>} />
         <Route path="/admin/customers" element={<RequireAdmin><AdminCustomers /></RequireAdmin>} />
         <Route path="/admin/sellers"   element={<RequireAdmin><AdminSellers /></RequireAdmin>} />
-        <Route path="/admin/products"  element={<Navigate to="/admin/users" replace />} />
-        <Route path="/admin/analytics" element={<Navigate to="/admin/users" replace />} />
-        <Route path="/admin/roles"     element={<Navigate to="/admin/users" replace />} />
+        <Route path="/admin/products"  element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/analytics" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/roles"     element={<Navigate to="/admin" replace />} />
 
         <Route path="/"             element={<Landing />} />
         <Route path="/home"         element={<StoreLayout><Home /></StoreLayout>} />
