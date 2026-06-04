@@ -4,6 +4,8 @@ import { CheckCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import './Auth.css'
 
+const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin
+
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,7 +18,7 @@ export default function ForgotPassword() {
     setLoading(true)
     try {
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${APP_URL}/reset-password`,
       })
       if (err) throw err
       setSent(true)

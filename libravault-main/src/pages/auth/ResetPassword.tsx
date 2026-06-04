@@ -16,14 +16,28 @@ export default function ResetPassword() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then((res) => {
-      if (res.data.session) {
-        setValidSession(true)
-      } else {
-        setError('This reset link is invalid or has expired. Please request a new one.')
+    const verifyResetLink = async () => {
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
+
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (exchangeError) {
+          setError('This reset link is invalid or has expired. Please request a new one.')
+          setChecking(false)
+          return
+        }
+
+        window.history.replaceState({}, document.title, '/reset-password')
       }
+
+      const { data } = await supabase.auth.getSession()
+      if (data.session) setValidSession(true)
+      else setError('This reset link is invalid or has expired. Please request a new one.')
       setChecking(false)
-    })
+    }
+
+    verifyResetLink()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
