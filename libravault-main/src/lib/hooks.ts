@@ -154,6 +154,7 @@ export function useAdminOrders() {
   return useAsync<any[]>(async () => {
     // get_all_orders() is SECURITY DEFINER so it bypasses RLS entirely
     const { data: orderRows, error: rpcError } = await supabase.rpc('get_all_orders')
+    console.log('[useAdminOrders] RPC result:', { orderRows, rpcError })
     if (rpcError) throw new Error(`get_all_orders RPC failed: ${rpcError.message}`)
     if (!orderRows || orderRows.length === 0) return []
 
@@ -170,6 +171,7 @@ export function useAdminOrders() {
       `)
       .in('id', orderIds)
       .order('created_at', { ascending: false })
+    console.log('[useAdminOrders] enriched query result:', { data, error })
 
     // If the join query fails due to RLS, fall back to raw RPC data without enrichment
     const rows = error ? orderRows : (data ?? orderRows)
