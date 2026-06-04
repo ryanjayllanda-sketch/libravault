@@ -30,6 +30,7 @@ DROP FUNCTION IF EXISTS public.ensure_single_default_address() CASCADE;
 DROP FUNCTION IF EXISTS public.get_user_role() CASCADE;
 DROP FUNCTION IF EXISTS public.is_staff() CASCADE;
 DROP FUNCTION IF EXISTS public.get_all_profiles() CASCADE;
+DROP FUNCTION IF EXISTS public.get_all_orders() CASCADE;
 DROP FUNCTION IF EXISTS public.admin_update_user_role(UUID, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_update_user_access(UUID, TEXT, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_delete_user(UUID) CASCADE;
@@ -198,6 +199,24 @@ CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
   SELECT get_user_role() = 'admin';
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = 'public';
+
+CREATE OR REPLACE FUNCTION public.get_all_orders()
+RETURNS TABLE (
+  id UUID, user_id UUID, address_id UUID, status TEXT,
+  payment_method TEXT, subtotal NUMERIC, shipping NUMERIC,
+  tax NUMERIC, total NUMERIC, notes TEXT,
+  created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
+) AS $$
+BEGIN
+  IF get_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin access required' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY SELECT o.id, o.user_id, o.address_id, o.status,
+    o.payment_method, o.subtotal, o.shipping, o.tax, o.total,
+    o.notes, o.created_at, o.updated_at
+  FROM public.orders o ORDER BY o.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public';
 
 CREATE OR REPLACE FUNCTION public.get_all_profiles()
 RETURNS TABLE (

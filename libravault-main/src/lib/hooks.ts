@@ -149,20 +149,32 @@ export function useOrders(userId: string | undefined) {
   }, [userId])
 }
 
-// Admin: all orders
+// Admin: all orders — uses get_all_orders() SECURITY DEFINER RPC to bypass RLS
 export function useAdminOrders() {
   return useAsync<any[]>(async () => {
+    // get_all_orders() is SECURITY DEFINER so it bypasses RLS entirely
+    const { data: orderRows, error: rpcError } = await supabase.rpc('get_all_orders')
+    if (rpcError) throw new Error(`get_all_orders RPC failed: ${rpcError.message}`)
+    if (!orderRows || orderRows.length === 0) return []
+
+    // Now fetch enriched data — since we already know the IDs are accessible,
+    // use the admin's session to join profiles/addresses/order_items
+    const orderIds = (orderRows as any[]).map((o) => o.id)
     const { data, error } = await supabase
       .from('orders')
       .select(`
-        *,
+        id, user_id, status, payment_method, subtotal, shipping, tax, total, created_at,
         profiles ( full_name, email ),
         addresses ( full_name, line1, city, province ),
         order_items ( qty, unit_price, products ( id, name, image, category ) )
       `)
+      .in('id', orderIds)
       .order('created_at', { ascending: false })
-    if (error) throw error
-    return (data ?? []).map((o: any) => ({
+
+    // If the join query fails due to RLS, fall back to raw RPC data without enrichment
+    const rows = error ? orderRows : (data ?? orderRows)
+
+    return rows.map((o: any) => ({
       id: `#${o.id.slice(0, 8).toUpperCase()}`,
       rawId: o.id,
       customer: o.profiles?.full_name || o.profiles?.email?.split('@')[0] || 'Unknown',
@@ -172,7 +184,7 @@ export function useAdminOrders() {
       status: o.status,
       date: new Date(o.created_at).toLocaleDateString(),
       createdAt: o.created_at,
-      address: o.addresses ? `${o.addresses.line1}, ${o.addresses.city}` : '',
+      address: o.addresses ? `${o.addresses.line1 ?? ''}, ${o.addresses.city ?? ''}`.trim().replace(/^,\s*/, '') : '',
       orderItems: o.order_items ?? [],
     }))
   }, [])

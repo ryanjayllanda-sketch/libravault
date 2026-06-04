@@ -16,7 +16,7 @@ const NEXT_STATUS: Partial<Record<OrderRow['status'], OrderRow['status']>> = {
 }
 
 export default function AdminOrders() {
-  const { data: orders, loading, refetch } = useAdminOrders()
+  const { data: orders, loading, error, refetch } = useAdminOrders()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<OrderRow['status']|'All'>('All')
   const [editingStatus, setEditingStatus] = useState<string|null>(null)
@@ -57,6 +57,13 @@ export default function AdminOrders() {
         <h2 className="admin-section-title">Orders</h2>
         <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>{filtered.length} results</span>
       </div>
+
+      {error && (
+        <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 16px', borderRadius: 8, fontSize: 13, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Error loading orders: {error}</span>
+          <button onClick={refetch} style={{ color: '#dc2626', fontWeight: 700, marginLeft: 12 }}>Retry</button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="admin-search" style={{ flex: 1, minWidth: 200 }}>
