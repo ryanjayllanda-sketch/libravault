@@ -33,7 +33,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   admin: [
     'admin:access',
     'orders:read',
-    'orders:update_status',
     'customers:read',
     'sellers:manage',
     'users:read',
