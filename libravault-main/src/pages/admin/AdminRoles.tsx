@@ -1,5 +1,5 @@
 import AdminLayout from './AdminLayout'
-import { ROLE_META, ROLE_PERMISSIONS } from '../../lib/rbac'
+import { ROLE_META, ROLE_PERMISSIONS, ROLES } from '../../lib/rbac'
 import type { Role, Permission } from '../../lib/rbac'
 import { useStore } from '../../store/useStore'
 import { Shield, Check, X } from 'lucide-react'
@@ -12,7 +12,7 @@ const ALL_PERMISSIONS: { group: string; perms: Permission[] }[] = [
   { group: 'Analytics',perms: ['analytics:read'] },
 ]
 
-const ROLES: Role[] = ['super_admin', 'manager', 'editor', 'viewer', 'customer']
+const ADMIN_ROLES = [...ROLES] as Role[]
 
 export default function AdminRoles() {
   const { role: currentRole } = useStore()
@@ -32,7 +32,7 @@ export default function AdminRoles() {
 
       {/* Role cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
-        {ROLES.map((r) => {
+        {ADMIN_ROLES.map((r) => {
           const m = ROLE_META[r]
           const permCount = ROLE_PERMISSIONS[r].length
           const isCurrentRole = r === currentRole
@@ -67,7 +67,7 @@ export default function AdminRoles() {
             <thead>
               <tr>
                 <th style={{ width: 200 }}>Permission</th>
-                {ROLES.map((r) => {
+                {ADMIN_ROLES.map((r) => {
                   const m = ROLE_META[r]
                   return (
                     <th key={r} style={{ textAlign: 'center', color: r === currentRole ? m.color : undefined }}>
@@ -85,7 +85,7 @@ export default function AdminRoles() {
               {ALL_PERMISSIONS.map(({ group, perms }) => (
                 <>
                   <tr key={`group-${group}`}>
-                    <td colSpan={ROLES.length + 1} style={{ background: 'var(--gray-50)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gray-500)', padding: '10px 20px' }}>
+                    <td colSpan={ADMIN_ROLES.length + 1} style={{ background: 'var(--gray-50)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gray-500)', padding: '10px 20px' }}>
                       {group}
                     </td>
                   </tr>
@@ -96,7 +96,7 @@ export default function AdminRoles() {
                           {perm}
                         </code>
                       </td>
-                      {ROLES.map((r) => {
+                      {ADMIN_ROLES.map((r) => {
                         const granted = ROLE_PERMISSIONS[r].includes(perm)
                         const isMe = r === currentRole
                         return (

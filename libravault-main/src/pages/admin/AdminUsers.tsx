@@ -20,6 +20,8 @@ const SELLER_STATUS_META: Record<Exclude<SellerStatus, null>, { label: string; c
   rejected: { label: 'Rejected', color: '#dc2626', bg: '#fee2e2' },
 }
 
+const ASSIGNABLE_ROLES: Role[] = ['customer', 'seller']
+
 function Badge({ label, color, bg }: { label: string; color: string; bg: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: bg, color, padding: '4px 10px', borderRadius: 50, fontSize: 12, fontWeight: 700 }}>
@@ -154,7 +156,7 @@ export default function AdminUsers() {
                           onChange={(e) => runAction(u.id, () => updateUserRole(u.id, e.target.value))}
                           style={{ borderRadius: 8, minWidth: 120 }}
                         >
-                          {ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
+                          {(userRole === 'admin' ? ROLES : ASSIGNABLE_ROLES).map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
                         </select>
                       </td>
                       <td>

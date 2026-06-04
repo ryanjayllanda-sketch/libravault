@@ -29,7 +29,7 @@ const ABOUT_CONTENT = {
   sections: [
     { title: 'About the Project', body: 'A fully functional storefront with user authentication, real-time inventory tracking, secure checkout, role-based admin controls, and an ACID-compliant Postgres database. Built with React, TypeScript, and Supabase.' },
     { title: 'Features',           body: 'Browse books by genre, filter by price and edition, manage a personal reading wishlist, leave verified reviews, save delivery addresses, track orders, and check out securely with Cash on Delivery.' },
-    { title: 'Admin Capabilities', body: 'Staff users (super admin, manager, editor, viewer) can manage books with cover image uploads, view and update order statuses, manage user roles, and analyze sales data through interactive dashboards.' },
+    { title: 'Admin Capabilities', body: 'Web admins manage user access, approve seller accounts, and suspend or delete customer and seller accounts when needed.' },
     { title: 'Technology Stack',   body: 'Frontend: React + TypeScript + Vite. Backend: Supabase (PostgreSQL + Auth + Storage + Realtime). Mobile-ready via Capacitor. Hosting on Vercel.' },
     { title: 'Disclaimer',         body: 'All book titles, cover images, and descriptions are used for educational demonstration purposes only. LibraVault is not affiliated with any publisher or author.' },
   ],

@@ -152,23 +152,11 @@ export async function updateOrderStatus(rawId: string, status: string) {
 }
 
 export async function updateUserRole(userId: string, role: string) {
-  const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
+  const { error } = await supabase.rpc('admin_update_user_role', {
     p_user_id: userId,
     p_role: role,
   })
-
-  if (rpcError) {
-    // Fallback: direct update (works if RLS policy allows it)
-    const { data, error } = await supabase
-      .from('profiles')
-      .update({ role, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .select('id, role')
-    if (error) throw error
-    if (!data || data.length === 0) {
-      throw new Error('Role update was blocked. Please update your Supabase policies from schema.sql.')
-    }
-  }
+  if (error) throw error
 }
 
 export async function updateUserAccess(userId: string, updates: {

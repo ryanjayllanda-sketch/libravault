@@ -29,6 +29,10 @@ DROP FUNCTION IF EXISTS public.set_review_verified() CASCADE;
 DROP FUNCTION IF EXISTS public.ensure_single_default_address() CASCADE;
 DROP FUNCTION IF EXISTS public.get_user_role() CASCADE;
 DROP FUNCTION IF EXISTS public.is_staff() CASCADE;
+DROP FUNCTION IF EXISTS public.get_all_profiles() CASCADE;
+DROP FUNCTION IF EXISTS public.admin_update_user_role(UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.admin_update_user_access(UUID, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.admin_delete_user(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.place_order(JSONB, UUID, TEXT, NUMERIC, NUMERIC, NUMERIC, NUMERIC) CASCADE;
 DROP FUNCTION IF EXISTS public.ensure_profile_exists() CASCADE;
 DROP FUNCTION IF EXISTS public.sync_product_sizes(BIGINT, JSONB) CASCADE;
@@ -56,11 +60,17 @@ CREATE TABLE public.profiles (
   phone       TEXT,
   avatar_url  TEXT,
   role        TEXT NOT NULL DEFAULT 'customer'
-                CHECK (role IN ('super_admin','manager','editor','viewer','customer')),
+                CHECK (role IN ('customer','seller','admin')),
+  account_status TEXT NOT NULL DEFAULT 'active'
+                CHECK (account_status IN ('active','suspended')),
+  seller_status  TEXT
+                CHECK (seller_status IN ('pending','approved','rejected') OR seller_status IS NULL),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_profiles_role  ON public.profiles(role);
+CREATE INDEX idx_profiles_account_status ON public.profiles(account_status);
+CREATE INDEX idx_profiles_seller_status ON public.profiles(seller_status);
 CREATE INDEX idx_profiles_email ON public.profiles(email);
 
 -- ── products: book catalog
@@ -186,8 +196,121 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = 'public';
 
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
-  SELECT get_user_role() IN ('super_admin','manager','editor','viewer');
+  SELECT get_user_role() = 'admin';
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = 'public';
+
+CREATE OR REPLACE FUNCTION public.get_all_profiles()
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  full_name TEXT,
+  phone TEXT,
+  avatar_url TEXT,
+  role TEXT,
+  account_status TEXT,
+  seller_status TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+) AS $$
+BEGIN
+  IF get_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin access required' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    p.id,
+    p.email,
+    p.full_name,
+    p.phone,
+    p.avatar_url,
+    p.role,
+    p.account_status,
+    p.seller_status,
+    p.created_at,
+    p.updated_at
+  FROM public.profiles p
+  ORDER BY
+    CASE WHEN p.role = 'seller' AND p.seller_status = 'pending' THEN 0 ELSE 1 END,
+    p.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public';
+
+CREATE OR REPLACE FUNCTION public.admin_update_user_role(
+  p_user_id UUID,
+  p_role TEXT
+) RETURNS VOID AS $$
+BEGIN
+  IF get_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin access required' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Admins cannot change their own role' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_role NOT IN ('customer', 'seller') THEN
+    RAISE EXCEPTION 'Only customer and seller roles can be assigned from the admin app' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.profiles
+  SET
+    role = p_role,
+    seller_status = CASE WHEN p_role = 'seller' THEN COALESCE(seller_status, 'pending') ELSE NULL END,
+    updated_at = NOW()
+  WHERE id = p_user_id AND role <> 'admin';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public';
+
+CREATE OR REPLACE FUNCTION public.admin_update_user_access(
+  p_user_id UUID,
+  p_account_status TEXT DEFAULT NULL,
+  p_seller_status TEXT DEFAULT NULL
+) RETURNS VOID AS $$
+BEGIN
+  IF get_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin access required' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Admins cannot update their own access' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_account_status IS NOT NULL AND p_account_status NOT IN ('active', 'suspended') THEN
+    RAISE EXCEPTION 'Invalid account status' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_seller_status IS NOT NULL AND p_seller_status NOT IN ('pending', 'approved', 'rejected') THEN
+    RAISE EXCEPTION 'Invalid seller status' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.profiles
+  SET
+    account_status = COALESCE(p_account_status, account_status),
+    seller_status = CASE
+      WHEN role = 'seller' THEN COALESCE(p_seller_status, seller_status)
+      ELSE NULL
+    END,
+    updated_at = NOW()
+  WHERE id = p_user_id AND role <> 'admin';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public';
+
+CREATE OR REPLACE FUNCTION public.admin_delete_user(p_user_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  IF get_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin access required' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Admins cannot delete their own account' USING ERRCODE = '42501';
+  END IF;
+
+  DELETE FROM public.profiles WHERE id = p_user_id AND role <> 'admin';
+  DELETE FROM auth.users WHERE id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public';
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -204,17 +327,17 @@ ALTER TABLE public.wishlists        ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can read own profile"       ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update own profile"     ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Staff can read all profiles"      ON public.profiles FOR SELECT USING (is_staff());
-CREATE POLICY "Super admin can update roles"     ON public.profiles FOR UPDATE USING (get_user_role() = 'super_admin');
+CREATE POLICY "Admin can read all profiles"      ON public.profiles FOR SELECT USING (is_staff());
+CREATE POLICY "Admin can update profiles"        ON public.profiles FOR UPDATE USING (get_user_role() = 'admin');
 
 CREATE POLICY "Anyone can read active products"  ON public.products FOR SELECT USING (is_active = TRUE);
 CREATE POLICY "Staff can read all products"      ON public.products FOR SELECT USING (is_staff());
-CREATE POLICY "Editor+ can insert products"      ON public.products FOR INSERT WITH CHECK (get_user_role() IN ('super_admin','manager','editor'));
-CREATE POLICY "Editor+ can update products"      ON public.products FOR UPDATE USING (get_user_role() IN ('super_admin','manager','editor'));
-CREATE POLICY "Manager+ can delete products"     ON public.products FOR DELETE USING (get_user_role() IN ('super_admin','manager'));
+CREATE POLICY "Admin can insert products"        ON public.products FOR INSERT WITH CHECK (get_user_role() = 'admin');
+CREATE POLICY "Admin can update products"        ON public.products FOR UPDATE USING (get_user_role() = 'admin');
+CREATE POLICY "Admin can delete products"        ON public.products FOR DELETE USING (get_user_role() = 'admin');
 
 CREATE POLICY "Anyone can read product editions" ON public.product_editions FOR SELECT USING (TRUE);
-CREATE POLICY "Editor+ can manage editions"      ON public.product_editions FOR ALL USING (get_user_role() IN ('super_admin','manager','editor'));
+CREATE POLICY "Admin can manage editions"        ON public.product_editions FOR ALL USING (get_user_role() = 'admin');
 
 CREATE POLICY "Users manage own addresses"       ON public.addresses FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Staff can read addresses"         ON public.addresses FOR SELECT USING (is_staff());
@@ -222,7 +345,7 @@ CREATE POLICY "Staff can read addresses"         ON public.addresses FOR SELECT 
 CREATE POLICY "Users can read own orders"        ON public.orders FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can create orders"          ON public.orders FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Staff can read all orders"        ON public.orders FOR SELECT USING (is_staff());
-CREATE POLICY "Manager+ can update order status" ON public.orders FOR UPDATE USING (get_user_role() IN ('super_admin','manager'));
+CREATE POLICY "Admin can update order status"    ON public.orders FOR UPDATE USING (get_user_role() = 'admin');
 
 CREATE POLICY "Users can read own order items"   ON public.order_items FOR SELECT
   USING (EXISTS (SELECT 1 FROM public.orders o WHERE o.id = order_id AND o.user_id = auth.uid()));
@@ -234,7 +357,7 @@ CREATE POLICY "Anyone can read reviews"          ON public.reviews FOR SELECT US
 CREATE POLICY "Auth users can add reviews"       ON public.reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update own reviews"     ON public.reviews FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete own reviews"     ON public.reviews FOR DELETE USING (auth.uid() = user_id);
-CREATE POLICY "Manager+ can delete any review"   ON public.reviews FOR DELETE USING (get_user_role() IN ('super_admin','manager'));
+CREATE POLICY "Admin can delete any review"      ON public.reviews FOR DELETE USING (get_user_role() = 'admin');
 
 CREATE POLICY "Users manage own reading list"    ON public.wishlists FOR ALL USING (auth.uid() = user_id);
 
@@ -244,9 +367,21 @@ CREATE POLICY "Users manage own reading list"    ON public.wishlists FOR ALL USI
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  requested_role TEXT := COALESCE(NEW.raw_user_meta_data->>'role', 'customer');
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name, role)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name',''), 'customer')
+  IF requested_role NOT IN ('customer', 'seller') THEN
+    requested_role := 'customer';
+  END IF;
+
+  INSERT INTO public.profiles (id, email, full_name, role, seller_status)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name',''),
+    requested_role,
+    CASE WHEN requested_role = 'seller' THEN 'pending' ELSE NULL END
+  )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
@@ -442,6 +577,6 @@ BEGIN
 END $$;
 
 -- ============================================================
--- AFTER REGISTERING, MAKE YOURSELF SUPER ADMIN:
--- UPDATE public.profiles SET role = 'super_admin' WHERE email = 'your@email.com';
+-- AFTER REGISTERING, MAKE YOURSELF WEB ADMIN:
+-- UPDATE public.profiles SET role = 'admin' WHERE email = 'your@email.com';
 -- ============================================================
