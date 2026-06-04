@@ -152,44 +152,37 @@ export function useOrders(userId: string | undefined) {
 // Admin: all orders — uses get_all_orders() SECURITY DEFINER RPC to bypass RLS
 export function useAdminOrders() {
   return useAsync<any[]>(async () => {
-    // get_all_orders() is SECURITY DEFINER so it bypasses RLS entirely
-    const { data: orderRows, error: rpcError } = await supabase.rpc('get_all_orders')
-    console.log('[useAdminOrders] RPC result:', { orderRows, rpcError })
-    if (rpcError) throw new Error(`get_all_orders RPC failed: ${rpcError.message}`)
-    if (!orderRows || orderRows.length === 0) return []
-
-    // Now fetch enriched data — since we already know the IDs are accessible,
-    // use the admin's session to join profiles/addresses/order_items
-    const orderIds = (orderRows as any[]).map((o) => o.id)
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`
-        id, user_id, status, payment_method, subtotal, shipping, tax, total, created_at,
-        profiles ( full_name, email ),
-        addresses ( full_name, line1, city, province ),
-        order_items ( qty, unit_price, products ( id, name, image, category ) )
-      `)
-      .in('id', orderIds)
-      .order('created_at', { ascending: false })
-    console.log('[useAdminOrders] enriched query result:', { data, error })
-
-    // If the join query fails due to RLS, fall back to raw RPC data without enrichment
-    const rows = error ? orderRows : (data ?? orderRows)
-
-    return rows.map((o: any) => ({
+    // get_all_orders() is SECURITY DEFINER and returns fully enriched rows
+    // bypassing RLS entirely — no second query needed
+    const { data, error } = await supabase.rpc('get_all_orders')
+    if (error) throw new Error(`get_all_orders RPC failed: ${error.message}`)
+    return (data ?? []).map((o: any) => ({
       id: `#${o.id.slice(0, 8).toUpperCase()}`,
       rawId: o.id,
-      customer: o.profiles?.full_name || o.profiles?.email?.split('@')[0] || 'Unknown',
-      email: o.profiles?.email ?? '',
-      items: o.order_items?.length ?? 0,
+      customer: o.customer_name || o.customer_email?.split('@')[0] || 'Unknown',
+      email: o.customer_email ?? '',
+      items: Number(o.item_count ?? 0),
       amount: Number(o.total),
       status: o.status,
       date: new Date(o.created_at).toLocaleDateString(),
       createdAt: o.created_at,
-      address: o.addresses ? `${o.addresses.line1 ?? ''}, ${o.addresses.city ?? ''}`.trim().replace(/^,\s*/, '') : '',
-      orderItems: o.order_items ?? [],
+      address: [o.address_line1, o.address_city].filter(Boolean).join(', '),
+      orderItems: [],
     }))
   }, [])
+}
+
+// Admin: order items detail for a specific order (used for drill-down)
+export function useAdminOrderItems(orderId: string | undefined) {
+  return useAsync<any[]>(async () => {
+    if (!orderId) return []
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('qty, unit_price, products ( id, name, image, category )')
+      .eq('order_id', orderId)
+    if (error) return []
+    return data ?? []
+  }, [orderId])
 }
 
 // Admin: all users (uses SECURITY DEFINER RPC to bypass RLS)
