@@ -1,30 +1,53 @@
 import { Link } from 'react-router-dom'
+import { BookOpen, Download, ShieldCheck, Smartphone } from 'lucide-react'
 import './Landing.css'
+
+const APK_URL = 'https://expo.dev/artifacts/eas/3xi2XmTLWytZrGRCMVyzQB.apk'
 
 export default function Landing() {
   return (
-    <main className="landing-page" aria-label="Jerry Thrift Shop app download">
+    <main className="landing-page" aria-label="LibraVault mobile app download">
       <section className="landing-card">
+
+        {/* Logo mark */}
+        <div className="landing-logo-wrap">
+          <BookOpen size={28} strokeWidth={2} color="#7c3aed" />
+        </div>
+
         <p className="landing-kicker">Mobile App</p>
-        <h1>Jerry Thrift Shop</h1>
+        <h1>LibraVault</h1>
         <p className="landing-intro">
-          Download the Android app below, then use the admin login link if you need to manage the store.
+          A digital bookstore platform where customers browse and purchase books,
+          sellers manage their listings, and admins oversee the entire ecosystem —
+          all connected through one shared database.
         </p>
 
-        <a className="landing-download" href="/downloads/jerry-thrift-shop.apk" download>
+        {/* Feature pills */}
+        <div className="landing-pills">
+          <span className="landing-pill"><Smartphone size={13} /> Customer App</span>
+          <span className="landing-pill"><ShieldCheck size={13} /> Seller Dashboard</span>
+          <span className="landing-pill"><BookOpen size={13} /> Books &amp; Orders</span>
+        </div>
+
+        <a
+          className="landing-download"
+          href={APK_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Download size={18} strokeWidth={2.5} />
           Download APK
         </a>
 
         <p className="landing-note">
-          If the download does not start, make sure the APK file is uploaded in the{' '}
-          <strong>downloads</strong> folder on Hostinger.
+          Android only · Requires Android 8.0 or higher
         </p>
 
         <div className="landing-divider" />
 
-        <p className="landing-admin-label">Admin access</p>
+        <p className="landing-admin-label">Manage your store</p>
         <Link className="landing-admin" to="/login">
-          Open Admin Login
+          Open Admin Dashboard
         </Link>
       </section>
     </main>
