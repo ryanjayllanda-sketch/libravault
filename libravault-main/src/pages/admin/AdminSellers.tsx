@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { CheckCircle2, Edit2, Loader, Search, Trash2, User, X, XCircle } from 'lucide-react'
+import { CheckCircle2, Edit2, Loader, Search, Trash2, User, X } from 'lucide-react'
 import AdminLayout from './AdminLayout'
 import { filterByRole, filterBySearch, buildInitialEditForm } from '../../lib/adminHelpers'
 import type { Profile, EditForm } from '../../lib/adminHelpers'
@@ -252,25 +252,14 @@ export default function AdminSellers() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           {isSaving && <span className="spinner" style={{ width: 16, height: 16 }} />}
 
-                          {/* Approve — shown when not already approved */}
-                          {sellerStatus !== 'approved' && (
+                          {/* Approve — shown only when pending */}
+                          {sellerStatus === 'pending' && (
                             <button
                               className="btn btn-sm btn-accent"
                               disabled={isSaving}
                               onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'approved' }))}
                             >
                               <CheckCircle2 size={14} /> Approve
-                            </button>
-                          )}
-
-                          {/* Reject — shown when not already rejected */}
-                          {sellerStatus !== 'rejected' && (
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              disabled={isSaving}
-                              onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'rejected' }))}
-                            >
-                              <XCircle size={14} /> Reject
                             </button>
                           )}
 
