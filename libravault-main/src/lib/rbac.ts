@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users } from 'lucide-react'
+import { LayoutDashboard, ShoppingBag, UserCheck, Store, Users } from 'lucide-react'
 
 export type Role = 'customer' | 'seller' | 'admin'
 
@@ -26,9 +26,21 @@ export type Permission =
   | 'users:update_status'
   | 'users:delete'
   | 'analytics:read'
+  | 'customers:read'
+  | 'sellers:manage'
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  admin: ['admin:access', 'users:read', 'users:update_role', 'users:update_status', 'users:delete'],
+  admin: [
+    'admin:access',
+    'orders:read',
+    'orders:update_status',
+    'customers:read',
+    'sellers:manage',
+    'users:read',
+    'users:update_role',
+    'users:update_status',
+    'users:delete',
+  ],
   seller: [],
   customer: [],
 }
@@ -90,6 +102,9 @@ export interface AdminNavItem {
 }
 
 export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, permission: 'admin:access' },
-  { to: '/admin/users', label: 'Users', icon: Users, permission: 'users:read' },
+  { to: '/admin',           label: 'Dashboard', icon: LayoutDashboard, permission: 'admin:access'   },
+  { to: '/admin/orders',    label: 'Orders',    icon: ShoppingBag,     permission: 'orders:read'    },
+  { to: '/admin/customers', label: 'Customers', icon: UserCheck,       permission: 'customers:read' },
+  { to: '/admin/sellers',   label: 'Sellers',   icon: Store,           permission: 'sellers:manage' },
+  { to: '/admin/users',     label: 'Users',     icon: Users,           permission: 'users:read'     },
 ]

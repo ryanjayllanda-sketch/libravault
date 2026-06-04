@@ -27,6 +27,9 @@ import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminOrders from './pages/admin/AdminOrders'
+import AdminCustomers from './pages/admin/AdminCustomers'
+import AdminSellers from './pages/admin/AdminSellers'
 
 import './index.css'
 
@@ -123,8 +126,10 @@ export default function App() {
 
         <Route path="/admin"           element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
         <Route path="/admin/users"     element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
+        <Route path="/admin/orders"    element={<RequireAdmin><AdminOrders /></RequireAdmin>} />
+        <Route path="/admin/customers" element={<RequireAdmin><AdminCustomers /></RequireAdmin>} />
+        <Route path="/admin/sellers"   element={<RequireAdmin><AdminSellers /></RequireAdmin>} />
         <Route path="/admin/products"  element={<Navigate to="/admin/users" replace />} />
-        <Route path="/admin/orders"    element={<Navigate to="/admin/users" replace />} />
         <Route path="/admin/analytics" element={<Navigate to="/admin/users" replace />} />
         <Route path="/admin/roles"     element={<Navigate to="/admin/users" replace />} />
 
