@@ -10,6 +10,10 @@ const STATUS_COLORS: Record<OrderRow['status'], string> = {
   Delivered: '#22c55e', Processing: '#f59e0b', Shipped: '#3b82f6', Cancelled: '#f04048',
 }
 const ALL_STATUSES: OrderRow['status'][] = ['Processing','Shipped','Delivered','Cancelled']
+const NEXT_STATUS: Partial<Record<OrderRow['status'], OrderRow['status']>> = {
+  Processing: 'Shipped',
+  Shipped: 'Delivered',
+}
 
 export default function AdminOrders() {
   const { data: orders, loading, refetch } = useAdminOrders()
@@ -34,7 +38,13 @@ export default function AdminOrders() {
     return c
   }, [orders])
 
-  const handleStatusChange = async (rawId: string, status: OrderRow['status']) => {
+  const handleStatusChange = async (order: OrderRow & { rawId: string }, status: OrderRow['status']) => {
+    if (NEXT_STATUS[order.status] !== status) {
+      alert(`Orders can only move from ${order.status} to ${NEXT_STATUS[order.status] ?? 'a final status'}.`)
+      return
+    }
+
+    const rawId = order.rawId
     setSaving(rawId)
     try { await updateOrderStatus(rawId, status); await refetch(); setEditingStatus(null) }
     catch (err: any) { alert(err.message) }
@@ -78,7 +88,11 @@ export default function AdminOrders() {
           <table className="admin-table">
             <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Amount</th><th>Date</th><th>Address</th><th>Status</th></tr></thead>
             <tbody>
-              {filtered.map((o: any) => (
+              {filtered.map((o: any) => {
+                const status = o.status as OrderRow['status']
+                const nextStatus = NEXT_STATUS[status]
+
+                return (
                 <tr key={o.id}>
                   <td><strong style={{ fontFamily: 'monospace', fontSize: 13 }}>{o.id}</strong></td>
                   <td>
@@ -91,28 +105,37 @@ export default function AdminOrders() {
                   <td style={{ fontSize: 13, color: 'var(--gray-600)', maxWidth: 160 }}>{o.address}</td>
                   <td>
                     <Can do="orders:update_status"
-                      fallback={<span className="status-badge" style={{ background: STATUS_COLORS[o.status as OrderRow['status']] + '18', color: STATUS_COLORS[o.status as OrderRow['status']] }}>{o.status}</span>}>
+                      fallback={<span className="status-badge" style={{ background: STATUS_COLORS[status] + '18', color: STATUS_COLORS[status] }}>{o.status}</span>}>
                       {editingStatus === o.rawId ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 130 }}>
-                          {ALL_STATUSES.map((s) => (
-                            <button key={s} onClick={() => handleStatusChange(o.rawId, s)}
-                              className="status-badge" style={{ background: STATUS_COLORS[s] + '18', color: STATUS_COLORS[s], cursor: 'pointer', fontSize: 12, opacity: saving === o.rawId ? 0.5 : 1 }}>
-                              {s}
+                          {nextStatus ? (
+                            <button onClick={() => handleStatusChange(o, nextStatus)}
+                              className="status-badge" style={{ background: STATUS_COLORS[nextStatus] + '18', color: STATUS_COLORS[nextStatus], cursor: 'pointer', fontSize: 12, opacity: saving === o.rawId ? 0.5 : 1 }}>
+                              {nextStatus}
                             </button>
-                          ))}
+                          ) : (
+                            <span className="status-badge" style={{ background: STATUS_COLORS[status] + '18', color: STATUS_COLORS[status], fontSize: 12 }}>
+                              Final
+                            </span>
+                          )}
                           <button onClick={() => setEditingStatus(null)} style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>Cancel</button>
                         </div>
-                      ) : (
+                      ) : nextStatus ? (
                         <button onClick={() => setEditingStatus(o.rawId)}
-                          className="status-badge" style={{ background: STATUS_COLORS[o.status as OrderRow['status']] + '18', color: STATUS_COLORS[o.status as OrderRow['status']], cursor: 'pointer' }}
-                          title="Click to change status">
+                          className="status-badge" style={{ background: STATUS_COLORS[status] + '18', color: STATUS_COLORS[status], cursor: 'pointer' }}
+                          title={`Move to ${nextStatus}`}>
                           {o.status} ▾
                         </button>
+                      ) : (
+                        <span className="status-badge" style={{ background: STATUS_COLORS[status] + '18', color: STATUS_COLORS[status] }}>
+                          {o.status}
+                        </span>
                       )}
                     </Can>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         )}

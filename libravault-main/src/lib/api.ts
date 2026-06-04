@@ -151,9 +151,7 @@ export async function updateOrderStatus(rawId: string, status: string) {
   if (error) throw error
 }
 
-// FIX: updateUserRole now uses an RPC function to bypass RLS restrictions
 export async function updateUserRole(userId: string, role: string) {
-  // Try RPC first (bypasses RLS if the SQL function has SECURITY DEFINER)
   const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
     p_user_id: userId,
     p_role: role,
@@ -168,9 +166,26 @@ export async function updateUserRole(userId: string, role: string) {
       .select('id, role')
     if (error) throw error
     if (!data || data.length === 0) {
-      throw new Error('Role update was blocked. Please run the fix_rls_policies.sql in your Supabase SQL Editor.')
+      throw new Error('Role update was blocked. Please update your Supabase policies from schema.sql.')
     }
   }
+}
+
+export async function updateUserAccess(userId: string, updates: {
+  account_status?: 'active' | 'suspended'
+  seller_status?: 'pending' | 'approved' | 'rejected' | null
+}) {
+  const { error } = await supabase.rpc('admin_update_user_access', {
+    p_user_id: userId,
+    p_account_status: updates.account_status ?? null,
+    p_seller_status: updates.seller_status ?? null,
+  })
+  if (error) throw error
+}
+
+export async function deleteUserAccount(userId: string) {
+  const { error } = await supabase.rpc('admin_delete_user', { p_user_id: userId })
+  if (error) throw error
 }
 
 export async function restockProduct(id: number, qty: number) {

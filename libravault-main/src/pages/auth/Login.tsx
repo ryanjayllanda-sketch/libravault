@@ -25,6 +25,23 @@ export default function Login() {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
       if (err) throw err
 
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, account_status, seller_status')
+        .eq('id', data.user.id)
+        .maybeSingle()
+      if (profileError) throw profileError
+
+      if (profile?.account_status === 'suspended') {
+        await supabase.auth.signOut()
+        throw new Error('Your account is suspended. Please contact support.')
+      }
+
+      if (profile?.role === 'seller' && profile?.seller_status !== 'approved') {
+        await supabase.auth.signOut()
+        throw new Error('Your seller account is waiting for admin approval.')
+      }
+
       const userRole = await fetchProfileRole(data.user.id)
       setUser(data.user, userRole)
       addToast(`Welcome back!`, 'success')

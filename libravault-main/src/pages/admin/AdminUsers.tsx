@@ -1,125 +1,107 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
-import { Search, X, Shield, User, ChevronDown, Loader } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { CheckCircle2, Loader, Search, Shield, Trash2, User, X, XCircle } from 'lucide-react'
 import AdminLayout from './AdminLayout'
-import { Can } from '../../components/Guards'
-import { ROLE_META, canModifyRole, normalizeRole } from '../../lib/rbac'
+import { ROLE_META, ROLES, normalizeRole } from '../../lib/rbac'
 import { useAdminUsers } from '../../lib/hooks'
-import { updateUserRole } from '../../lib/api'
-import { useStore } from '../../store/useStore'
+import { deleteUserAccount, updateUserAccess, updateUserRole } from '../../lib/api'
 import type { Role } from '../../lib/rbac'
 
-const ALL_ROLES: Role[] = ['super_admin','manager','editor','viewer','customer']
+type AccountStatus = 'active' | 'suspended'
+type SellerStatus = 'pending' | 'approved' | 'rejected' | null
 
-function RoleDropdown({ u, currentRole, onchange, saving }: {
-  u: any, currentRole: Role, onchange: (id: string, role: Role) => void, saving: string | null
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const userRole = normalizeRole(u.role)
+const ACCOUNT_STATUS_META: Record<AccountStatus, { label: string; color: string; bg: string }> = {
+  active: { label: 'Active', color: '#16a34a', bg: '#dcfce7' },
+  suspended: { label: 'Suspended', color: '#dc2626', bg: '#fee2e2' },
+}
 
-  const handleOpen = () => {
-    if (btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect()
-      setPos({ top: rect.bottom + 4, left: rect.left })
-    }
-    setOpen((v) => !v)
-  }
+const SELLER_STATUS_META: Record<Exclude<SellerStatus, null>, { label: string; color: string; bg: string }> = {
+  pending: { label: 'Pending approval', color: '#d97706', bg: '#fef3c7' },
+  approved: { label: 'Approved seller', color: '#16a34a', bg: '#dcfce7' },
+  rejected: { label: 'Rejected', color: '#dc2626', bg: '#fee2e2' },
+}
 
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (
-        btnRef.current && !btnRef.current.contains(target) &&
-        menuRef.current && !menuRef.current.contains(target)
-      ) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
+function Badge({ label, color, bg }: { label: string; color: string; bg: string }) {
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        ref={btnRef}
-        onClick={handleOpen}
-        disabled={saving === u.id}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', border: '1.5px solid var(--gray-200)', borderRadius: 6, fontSize: 13, cursor: 'pointer', background: 'var(--white)' }}>
-        {saving === u.id ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Saving…</> : <>Change <ChevronDown size={13} /></>}
-      </button>
-      {open && (
-        <div ref={menuRef} style={{ position: 'fixed', top: pos.top, left: pos.left, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999, minWidth: 160, overflow: 'hidden' }}>
-          {ALL_ROLES.filter((r) => canModifyRole(currentRole, r) || r === userRole).map((r) => {
-            const m = ROLE_META[r]
-            return (
-              <button key={r} onClick={() => { onchange(u.id, r); setOpen(false) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', fontSize: 13, textAlign: 'left', background: r === userRole ? m.bg : 'var(--white)', color: r === userRole ? m.color : 'var(--black)', fontWeight: r === userRole ? 700 : 400, border: 'none', cursor: 'pointer' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
-                {m.label} {r === userRole && '✓'}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: bg, color, padding: '4px 10px', borderRadius: 50, fontSize: 12, fontWeight: 700 }}>
+      {label}
+    </span>
   )
 }
 
 export default function AdminUsers() {
-  const { role: currentRole } = useStore()
   const { data: users, loading, refetch } = useAdminUsers()
   const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState<Role|'All'>('All')
-  const [saving, setSaving] = useState<string|null>(null)
-  const [roleError, setRoleError] = useState('')
+  const [roleFilter, setRoleFilter] = useState<Role | 'All'>('All')
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   const filtered = useMemo(() => {
     let items = [...(users ?? [])]
     if (search) {
       const q = search.toLowerCase()
-      items = items.filter((u: any) => u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))
+      items = items.filter((u: any) =>
+        u.full_name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q)
+      )
     }
     if (roleFilter !== 'All') items = items.filter((u: any) => normalizeRole(u.role) === roleFilter)
     return items
   }, [users, search, roleFilter])
 
-  const handleRoleChange = async (userId: string, newRole: Role) => {
-    setRoleError('')
+  const counts = useMemo(() => {
+    const list = users ?? []
+    return {
+      total: list.length,
+      pendingSellers: list.filter((u: any) => u.role === 'seller' && u.seller_status === 'pending').length,
+      suspended: list.filter((u: any) => u.account_status === 'suspended').length,
+    }
+  }, [users])
+
+  const runAction = async (userId: string, action: () => Promise<void>) => {
+    setError('')
     setSaving(userId)
-    try { await updateUserRole(userId, newRole); await refetch() }
-    catch (err: any) { setRoleError(err.message ?? 'Failed to update role') }
-    finally { setSaving(null) }
+    try {
+      await action()
+      await refetch()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Action failed. Please try again.')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const handleDelete = async (userId: string, label: string) => {
+    if (!confirm(`Delete ${label}? This removes the account and related profile data.`)) return
+    await runAction(userId, () => deleteUserAccount(userId))
   }
 
   return (
     <AdminLayout>
       <div className="admin-section-header">
-        <h2 className="admin-section-title">Users</h2>
-        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--gray-500)' }}>
-          <span>Total: <strong style={{ color: 'var(--black)' }}>{users?.length ?? '…'}</strong></span>
+        <h2 className="admin-section-title">User Management</h2>
+        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--gray-500)', flexWrap: 'wrap' }}>
+          <span>Total: <strong style={{ color: 'var(--black)' }}>{counts.total}</strong></span>
+          <span>Pending sellers: <strong style={{ color: '#d97706' }}>{counts.pendingSellers}</strong></span>
+          <span>Suspended: <strong style={{ color: 'var(--red)' }}>{counts.suspended}</strong></span>
         </div>
       </div>
 
-      {roleError && (
+      {error && (
         <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 16px', borderRadius: 8, fontSize: 14, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>⚠ {roleError}</span>
-          <button onClick={() => setRoleError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontWeight: 700 }}>✕</button>
+          <span>{error}</span>
+          <button onClick={() => setError('')} style={{ color: '#dc2626', fontWeight: 700 }}><X size={14} /></button>
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="admin-search" style={{ flex: 1, minWidth: 200 }}>
+        <div className="admin-search" style={{ flex: 1, minWidth: 220 }}>
           <Search size={16} color="var(--gray-400)" />
-          <input placeholder="Search by name or email…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input placeholder="Search by name or email..." value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button onClick={() => setSearch('')}><X size={14} /></button>}
         </div>
-        <select className="sort-select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as Role|'All')} style={{ borderRadius: 8 }}>
-          <option value="All">All Roles</option>
-          {ALL_ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
+        <select className="sort-select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as Role | 'All')} style={{ borderRadius: 8 }}>
+          <option value="All">All roles</option>
+          {ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
         </select>
       </div>
 
@@ -130,55 +112,101 @@ export default function AdminUsers() {
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           </div>
         ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>User</th><th>Joined</th><th>Role</th>
-                <Can do="users:update_role"><th>Change Role</th></Can>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((u: any) => {
-                const userRole = normalizeRole(u.role)
-                const meta = ROLE_META[userRole]
-                const canChange = canModifyRole(currentRole, userRole)
-                return (
-                  <tr key={u.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: '50%', background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {userRole !== 'customer'
-                            ? <Shield size={15} color={meta.color} />
-                            : <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--gray-600)' }}>{(u.full_name || u.email || '?').charAt(0).toUpperCase()}</span>
-                          }
-                        </div>
-                        <div>
-                          <strong style={{ fontSize: 14 }}>{u.full_name || '(no name)'}</strong><br />
-                          <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>{u.email}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 13, color: 'var(--gray-500)' }}>{new Date(u.created_at).toLocaleDateString()}</td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: meta.bg, color: meta.color, padding: '4px 12px', borderRadius: 50, fontSize: 12, fontWeight: 700 }}>
-                        {userRole !== 'customer' ? <Shield size={10} /> : <User size={10} />}
-                        {meta.label}
-                      </span>
-                    </td>
-                    <Can do="users:update_role">
+          <div style={{ overflowX: 'auto' }}>
+            <table className="admin-table" style={{ minWidth: 980 }}>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Account</th>
+                  <th>Seller Approval</th>
+                  <th>Joined</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((u: any) => {
+                  const userRole = normalizeRole(u.role)
+                  const roleMeta = ROLE_META[userRole]
+                  const accountStatus = (u.account_status ?? 'active') as AccountStatus
+                  const sellerStatus = (u.seller_status ?? null) as SellerStatus
+                  const isSaving = saving === u.id
+                  const displayName = u.full_name || u.email || 'this user'
+
+                  return (
+                    <tr key={u.id}>
                       <td>
-                        {canChange ? (
-                          <RoleDropdown u={u} currentRole={currentRole} onchange={handleRoleChange} saving={saving} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 38, height: 38, borderRadius: '50%', background: roleMeta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {userRole === 'admin' ? <Shield size={15} color={roleMeta.color} /> : <User size={15} color={roleMeta.color} />}
+                          </div>
+                          <div>
+                            <strong style={{ fontSize: 14 }}>{u.full_name || '(no name)'}</strong><br />
+                            <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>{u.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <select
+                          className="sort-select"
+                          value={userRole}
+                          disabled={isSaving || userRole === 'admin'}
+                          onChange={(e) => runAction(u.id, () => updateUserRole(u.id, e.target.value))}
+                          style={{ borderRadius: 8, minWidth: 120 }}
+                        >
+                          {ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <Badge {...ACCOUNT_STATUS_META[accountStatus]} />
+                      </td>
+                      <td>
+                        {userRole === 'seller' && sellerStatus ? (
+                          <Badge {...SELLER_STATUS_META[sellerStatus]} />
                         ) : (
-                          <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>—</span>
+                          <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>Not a seller</span>
                         )}
                       </td>
-                    </Can>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      <td style={{ fontSize: 13, color: 'var(--gray-500)' }}>
+                        {new Date(u.created_at).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          {isSaving && <span className="spinner" style={{ width: 16, height: 16 }} />}
+
+                          {userRole === 'seller' && sellerStatus !== 'approved' && (
+                            <button className="btn btn-sm btn-accent" disabled={isSaving} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'approved' }))}>
+                              <CheckCircle2 size={14} /> Approve
+                            </button>
+                          )}
+
+                          {userRole === 'seller' && sellerStatus !== 'rejected' && (
+                            <button className="btn btn-sm btn-secondary" disabled={isSaving} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'rejected' }))}>
+                              <XCircle size={14} /> Reject
+                            </button>
+                          )}
+
+                          {accountStatus === 'suspended' ? (
+                            <button className="btn btn-sm btn-secondary" disabled={isSaving} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { account_status: 'active' }))}>
+                              Reactivate
+                            </button>
+                          ) : (
+                            <button className="btn btn-sm btn-secondary" disabled={isSaving || userRole === 'admin'} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { account_status: 'suspended' }))}>
+                              Suspend
+                            </button>
+                          )}
+
+                          <button className="btn btn-sm" disabled={isSaving || userRole === 'admin'} onClick={() => handleDelete(u.id, displayName)} style={{ color: '#dc2626', border: '1.5px solid #fecaca', background: '#fff' }}>
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
         {!loading && filtered.length === 0 && <div className="admin-table-empty">No users found.</div>}
       </div>

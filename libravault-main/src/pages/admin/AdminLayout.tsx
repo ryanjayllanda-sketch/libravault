@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom'
 import { LogOut, Store, Menu, X, BookOpen } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { hasPermission, ADMIN_NAV_ITEMS, ROLE_META } from '../../lib/rbac'
-import { ReadOnlyBadge } from '../../components/Guards'
 import './Admin.css'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +14,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const visibleNav = ADMIN_NAV_ITEMS.filter((item) => hasPermission(role, item.permission))
 
   const roleMeta = ROLE_META[role]
-  const isReadOnly = hasPermission(role, 'admin:access') && !hasPermission(role, 'products:create')
   const currentPage = visibleNav.find((n) => n.to === location.pathname)?.label ?? 'Admin'
 
   return (
@@ -80,7 +78,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Menu size={20} />
             </button>
             <h1 className="admin-page-title">{currentPage}</h1>
-            {isReadOnly && <ReadOnlyBadge />}
           </div>
           <div className="admin-topbar-right">
             <div className="admin-avatar" style={{ background: roleMeta.color }}>

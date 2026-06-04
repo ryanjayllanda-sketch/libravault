@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { useStore } from './store/useStore'
 import { fetchProfileRole } from './lib/profileRole'
@@ -11,6 +11,7 @@ import Footer from './components/Footer'
 import Toast from './components/Toast'
 import CartModal from './components/CartModal'
 
+import Landing from './pages/Landing'
 import Home from './pages/Home'
 import Products from './pages/Products'
 import ProductDetail from './pages/ProductDetail'
@@ -25,12 +26,7 @@ import Register from './pages/auth/Register'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 
-import Dashboard from './pages/admin/Dashboard'
-import AdminProducts from './pages/admin/AdminProducts'
-import AdminOrders from './pages/admin/AdminOrders'
 import AdminUsers from './pages/admin/AdminUsers'
-import AdminAnalytics from './pages/admin/AdminAnalytics'
-import AdminRoles from './pages/admin/AdminRoles'
 
 import './index.css'
 
@@ -125,14 +121,15 @@ export default function App() {
         <Route path="/reset-password"  element={<ResetPassword />} />
         <Route path="/access-denied"   element={<StoreLayout><AccessDenied fullPage /></StoreLayout>} />
 
-        <Route path="/admin"           element={<RequireAdmin><Dashboard /></RequireAdmin>} />
-        <Route path="/admin/products"  element={<RequireAdmin><AdminProducts /></RequireAdmin>} />
-        <Route path="/admin/orders"    element={<RequireAdmin><AdminOrders /></RequireAdmin>} />
+        <Route path="/admin"           element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
         <Route path="/admin/users"     element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
-        <Route path="/admin/analytics" element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
-        <Route path="/admin/roles"     element={<RequireAdmin><AdminRoles /></RequireAdmin>} />
+        <Route path="/admin/products"  element={<Navigate to="/admin/users" replace />} />
+        <Route path="/admin/orders"    element={<Navigate to="/admin/users" replace />} />
+        <Route path="/admin/analytics" element={<Navigate to="/admin/users" replace />} />
+        <Route path="/admin/roles"     element={<Navigate to="/admin/users" replace />} />
 
-        <Route path="/"             element={<StoreLayout><Home /></StoreLayout>} />
+        <Route path="/"             element={<Landing />} />
+        <Route path="/home"         element={<StoreLayout><Home /></StoreLayout>} />
         <Route path="/products"     element={<StoreLayout><Products /></StoreLayout>} />
         <Route path="/products/:id" element={<StoreLayout><ProductDetail /></StoreLayout>} />
 

@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../store/useStore'
 import './Auth.css'
 
-interface FormState { name: string; email: string; password: string; confirm: string }
+interface FormState { name: string; email: string; password: string; confirm: string; role: 'customer' | 'seller' }
 interface FieldErrors { name?: string; email?: string; password?: string; confirm?: string }
 
 function PasswordStrength({ password }: { password: string }) {
@@ -41,7 +41,7 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function Register() {
-  const [form, setForm] = useState<FormState>({ name: '', email: '', password: '', confirm: '' })
+  const [form, setForm] = useState<FormState>({ name: '', email: '', password: '', confirm: '', role: 'customer' })
   const [errors, setErrors] = useState<FieldErrors>({})
   const [showPw, setShowPw] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -75,10 +75,15 @@ export default function Register() {
       const { error: err } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
-        options: { data: { full_name: form.name } },
+        options: { data: { full_name: form.name, role: form.role } },
       })
       if (err) throw err
-      addToast('Account created! Check your email to verify.', 'success')
+      addToast(
+        form.role === 'seller'
+          ? 'Seller account created! Verify your email, then wait for admin approval.'
+          : 'Account created! Check your email to verify.',
+        'success'
+      )
       navigate('/login')
     } catch (err: unknown) {
       setServerError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
@@ -122,6 +127,35 @@ export default function Register() {
             <label className="form-label" htmlFor="email">Email Address</label>
             <input id="email" type="email" className={`form-input${errors.email ? ' error' : ''}`} value={form.email} onChange={setField('email')} placeholder="you@example.com" autoComplete="email" />
             {errors.email && <p className="form-error">{errors.email}</p>}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Account Type</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {(['customer', 'seller'] as const).map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, role }))}
+                  style={{
+                    border: `1.5px solid ${form.role === role ? 'var(--black)' : 'var(--gray-200)'}`,
+                    borderRadius: 8,
+                    padding: '12px 10px',
+                    background: form.role === role ? 'var(--black)' : 'var(--white)',
+                    color: form.role === role ? 'var(--white)' : 'var(--black)',
+                    fontWeight: 700,
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+            {form.role === 'seller' && (
+              <p style={{ fontSize: 12, color: 'var(--gray-500)', lineHeight: 1.5 }}>
+                Seller accounts must be approved by an admin after email verification.
+              </p>
+            )}
           </div>
 
           <div className="form-group">
