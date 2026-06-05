@@ -80,8 +80,11 @@ export default function Dashboard() {
 
   const totalRevenue = analytics?.totalRevenue ?? 0
   const totalOrders  = analytics?.totalOrders ?? 0
-  const totalUsers   = analytics?.totalUsers ?? 0
+  const totalUsers   = analytics?.totalUsers ?? 0   // customers only
   const totalBooks   = analytics?.totalProducts ?? 0
+
+  // Use orders from useAdminOrders for status breakdown (same RPC, already loaded)
+  const allOrdersCount = (orders ?? []).length
 
   return (
     <AdminLayout>
@@ -110,7 +113,7 @@ export default function Dashboard() {
           <div className="stat-cards" style={{ marginBottom: 24 }}>
             {[
               { label: 'Total Revenue',  value: `₱${totalRevenue.toLocaleString('en', { maximumFractionDigits: 0 })}`, icon: TrendingUp, color: '#3b82f6', sub: 'All time sales' },
-              { label: 'Total Orders',   value: totalOrders,  icon: ShoppingBag, color: '#8b5cf6', sub: `${statusCounts.Processing} processing` },
+              { label: 'Total Orders',   value: allOrdersCount,  icon: ShoppingBag, color: '#8b5cf6', sub: `${statusCounts.Processing} processing` },
               { label: 'Customers',      value: totalUsers,   icon: Users,       color: '#22c55e', sub: `${pendingSellers} seller${pendingSellers !== 1 ? 's' : ''} pending` },
               { label: 'Books in Catalog', value: totalBooks, icon: BookOpen,    color: '#f59e0b', sub: `${analytics?.lowStockProducts?.length ?? 0} low stock` },
             ].map((s) => (
@@ -163,7 +166,7 @@ export default function Dashboard() {
               <span style={{ fontWeight: 700, fontSize: 15, display: 'block', marginBottom: 18 }}>Order Status</span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {(Object.entries(statusCounts) as [string, number][]).map(([status, count]) => {
-                  const pct = totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0
+                  const pct = allOrdersCount > 0 ? Math.round((count / allOrdersCount) * 100) : 0
                   return (
                     <div key={status}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>

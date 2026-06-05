@@ -194,36 +194,39 @@ export function useAdminUsers() {
   }, [])
 }
 
-// Admin: analytics aggregate
+// Admin: analytics aggregate — uses SECURITY DEFINER RPCs to bypass RLS
 export function useAdminAnalytics() {
   return useAsync<any>(async () => {
-    const [ordersRes, productsRes, usersRes] = await Promise.all([
-      supabase.from('orders').select('total, status, created_at'),
-      supabase.from('products').select('id, name, stock, category'),
-      supabase.from('profiles').select('id, created_at'),
+    const [ordersRes, productsRes, profilesRes] = await Promise.all([
+      supabase.rpc('get_all_orders'),                             // bypasses RLS
+      supabase.from('products').select('id, name, price, stock, category'), // public read
+      supabase.rpc('get_all_profiles'),                           // bypasses RLS
     ])
-    if (ordersRes.error) throw ordersRes.error
 
-    const orders = ordersRes.data ?? []
-    const products = productsRes.data ?? []
-    const users = usersRes.data ?? []
+    if (ordersRes.error) throw new Error(`Orders RPC failed: ${ordersRes.error.message}`)
 
-    const delivered = orders.filter((o: any) => o.status !== 'Cancelled')
-    const totalRevenue = delivered.reduce((s: number, o: any) => s + Number(o.total), 0)
+    const orders   = (ordersRes.data   ?? []) as any[]
+    const products = (productsRes.data ?? []) as any[]
+    const profiles = (profilesRes.data ?? []) as any[]
 
-    // Monthly revenue for current year
+    const nonCancelled = orders.filter((o) => o.status !== 'Cancelled')
+    const totalRevenue = nonCancelled.reduce((s, o) => s + Number(o.total), 0)
+
+    // Monthly revenue for the current year (12 buckets)
     const monthly = Array.from({ length: 12 }, (_, i) => {
       const month = i + 1
-      return delivered
-        .filter((o: any) => new Date(o.created_at).getMonth() + 1 === month &&
-          new Date(o.created_at).getFullYear() === new Date().getFullYear())
-        .reduce((s: number, o: any) => s + Number(o.total), 0)
+      return nonCancelled
+        .filter((o) => {
+          const d = new Date(o.created_at)
+          return d.getMonth() + 1 === month && d.getFullYear() === new Date().getFullYear()
+        })
+        .reduce((s, o) => s + Number(o.total), 0)
     })
 
     return {
       totalRevenue,
-      totalOrders: orders.length,
-      totalUsers: users.length,
+      totalOrders:   orders.length,
+      totalUsers:    profiles.filter((p: any) => p.role === 'customer').length,
       totalProducts: products.length,
       lowStockProducts: products.filter((p: any) => p.stock < 10),
       products,
