@@ -79,7 +79,6 @@ export default function Dashboard() {
   const maxMonthly = Math.max(...monthlyData.map(m => m.value), 1)
 
   const totalRevenue = analytics?.totalRevenue ?? 0
-  const totalOrders  = analytics?.totalOrders ?? 0
   const totalUsers   = analytics?.totalUsers ?? 0   // customers only
   const totalBooks   = analytics?.totalProducts ?? 0
 
