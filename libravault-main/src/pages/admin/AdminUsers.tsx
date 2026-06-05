@@ -1,23 +1,23 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, Loader, Search, Shield, Trash2, User, X, XCircle } from 'lucide-react'
+import { CheckCircle2, Loader, Plus, Search, Shield, Trash2, User, X, XCircle } from 'lucide-react'
 import AdminLayout from './AdminLayout'
 import { ROLE_META, ROLES, normalizeRole } from '../../lib/rbac'
 import { useAdminUsers } from '../../lib/hooks'
-import { deleteUserAccount, updateUserAccess, updateUserRole } from '../../lib/api'
+import { adminCreateUser, deleteUserAccount, updateUserAccess, updateUserRole } from '../../lib/api'
 import type { Role } from '../../lib/rbac'
 
 type AccountStatus = 'active' | 'suspended'
 type SellerStatus = 'pending' | 'approved' | 'rejected' | null
 
 const ACCOUNT_STATUS_META: Record<AccountStatus, { label: string; color: string; bg: string }> = {
-  active: { label: 'Active', color: '#16a34a', bg: '#dcfce7' },
+  active:    { label: 'Active',    color: '#16a34a', bg: '#dcfce7' },
   suspended: { label: 'Suspended', color: '#dc2626', bg: '#fee2e2' },
 }
 
 const SELLER_STATUS_META: Record<Exclude<SellerStatus, null>, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Pending approval', color: '#d97706', bg: '#fef3c7' },
-  approved: { label: 'Approved seller', color: '#16a34a', bg: '#dcfce7' },
-  rejected: { label: 'Rejected', color: '#dc2626', bg: '#fee2e2' },
+  pending:  { label: 'Pending approval', color: '#d97706', bg: '#fef3c7' },
+  approved: { label: 'Approved seller',  color: '#16a34a', bg: '#dcfce7' },
+  rejected: { label: 'Rejected',         color: '#dc2626', bg: '#fee2e2' },
 }
 
 const ASSIGNABLE_ROLES: Role[] = ['customer', 'seller']
@@ -30,20 +30,27 @@ function Badge({ label, color, bg }: { label: string; color: string; bg: string 
   )
 }
 
+const EMPTY_FORM = { full_name: '', email: '', password: '', role: 'customer' as Role }
+
 export default function AdminUsers() {
   const { data: users, loading, refetch } = useAdminUsers()
-  const [search, setSearch] = useState('')
+  const [search, setSearch]         = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | 'All'>('All')
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState('')
+  const [saving, setSaving]         = useState<string | null>(null)
+  const [error, setError]           = useState('')
+
+  // Add User modal
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addForm, setAddForm]           = useState({ ...EMPTY_FORM })
+  const [addError, setAddError]         = useState('')
+  const [addLoading, setAddLoading]     = useState(false)
 
   const filtered = useMemo(() => {
     let items = [...(users ?? [])]
     if (search) {
       const q = search.toLowerCase()
       items = items.filter((u: any) =>
-        u.full_name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q)
+        u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
       )
     }
     if (roleFilter !== 'All') items = items.filter((u: any) => normalizeRole(u.role) === roleFilter)
@@ -53,23 +60,18 @@ export default function AdminUsers() {
   const counts = useMemo(() => {
     const list = users ?? []
     return {
-      total: list.length,
+      total:          list.length,
       pendingSellers: list.filter((u: any) => u.role === 'seller' && u.seller_status === 'pending').length,
-      suspended: list.filter((u: any) => u.account_status === 'suspended').length,
+      suspended:      list.filter((u: any) => u.account_status === 'suspended').length,
     }
   }, [users])
 
   const runAction = async (userId: string, action: () => Promise<void>) => {
     setError('')
     setSaving(userId)
-    try {
-      await action()
-      await refetch()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Action failed. Please try again.')
-    } finally {
-      setSaving(null)
-    }
+    try { await action(); await refetch() }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : 'Action failed.') }
+    finally { setSaving(null) }
   }
 
   const handleDelete = async (userId: string, label: string) => {
@@ -77,14 +79,48 @@ export default function AdminUsers() {
     await runAction(userId, () => deleteUserAccount(userId))
   }
 
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAddError('')
+    if (!addForm.full_name.trim()) { setAddError('Full name is required.'); return }
+    if (!addForm.email.trim())     { setAddError('Email is required.'); return }
+    if (addForm.password.length < 8) { setAddError('Password must be at least 8 characters.'); return }
+
+    setAddLoading(true)
+    try {
+      await adminCreateUser({
+        email:     addForm.email.trim(),
+        password:  addForm.password,
+        full_name: addForm.full_name.trim(),
+        role:      addForm.role,
+      })
+      await refetch()
+      setShowAddModal(false)
+      setAddForm({ ...EMPTY_FORM })
+    } catch (err: unknown) {
+      setAddError(err instanceof Error ? err.message : 'Failed to create user.')
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="admin-section-header">
         <h2 className="admin-section-title">User Management</h2>
-        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--gray-500)', flexWrap: 'wrap' }}>
-          <span>Total: <strong style={{ color: 'var(--black)' }}>{counts.total}</strong></span>
-          <span>Pending sellers: <strong style={{ color: '#d97706' }}>{counts.pendingSellers}</strong></span>
-          <span>Suspended: <strong style={{ color: 'var(--red)' }}>{counts.suspended}</strong></span>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--gray-500)', flexWrap: 'wrap' }}>
+            <span>Total: <strong style={{ color: 'var(--black)' }}>{counts.total}</strong></span>
+            <span>Pending sellers: <strong style={{ color: '#d97706' }}>{counts.pendingSellers}</strong></span>
+            <span>Suspended: <strong style={{ color: 'var(--red)' }}>{counts.suspended}</strong></span>
+          </div>
+          <button
+            className="btn btn-accent"
+            onClick={() => { setAddForm({ ...EMPTY_FORM }); setAddError(''); setShowAddModal(true) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Plus size={15} /> Add User
+          </button>
         </div>
       </div>
 
@@ -118,22 +154,17 @@ export default function AdminUsers() {
             <table className="admin-table" style={{ minWidth: 980 }}>
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th>Role</th>
-                  <th>Account</th>
-                  <th>Seller Approval</th>
-                  <th>Joined</th>
-                  <th>Actions</th>
+                  <th>User</th><th>Role</th><th>Account</th><th>Seller Approval</th><th>Joined</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((u: any) => {
-                  const userRole = normalizeRole(u.role)
-                  const roleMeta = ROLE_META[userRole]
+                  const userRole     = normalizeRole(u.role)
+                  const roleMeta     = ROLE_META[userRole]
                   const accountStatus = (u.account_status ?? 'active') as AccountStatus
-                  const sellerStatus = (u.seller_status ?? null) as SellerStatus
-                  const isSaving = saving === u.id
-                  const displayName = u.full_name || u.email || 'this user'
+                  const sellerStatus  = (u.seller_status ?? null) as SellerStatus
+                  const isSaving     = saving === u.id
+                  const displayName  = u.full_name || u.email || 'this user'
 
                   return (
                     <tr key={u.id}>
@@ -156,12 +187,12 @@ export default function AdminUsers() {
                           onChange={(e) => runAction(u.id, () => updateUserRole(u.id, e.target.value))}
                           style={{ borderRadius: 8, minWidth: 120 }}
                         >
-                          {(userRole === 'admin' ? ROLES : ASSIGNABLE_ROLES).map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
+                          {(userRole === 'admin' ? ROLES : ASSIGNABLE_ROLES).map((r) => (
+                            <option key={r} value={r}>{ROLE_META[r].label}</option>
+                          ))}
                         </select>
                       </td>
-                      <td>
-                        <Badge {...ACCOUNT_STATUS_META[accountStatus]} />
-                      </td>
+                      <td><Badge {...ACCOUNT_STATUS_META[accountStatus]} /></td>
                       <td>
                         {userRole === 'seller' && sellerStatus ? (
                           <Badge {...SELLER_STATUS_META[sellerStatus]} />
@@ -177,28 +208,34 @@ export default function AdminUsers() {
                           {isSaving && <span className="spinner" style={{ width: 16, height: 16 }} />}
 
                           {userRole === 'seller' && sellerStatus !== 'approved' && (
-                            <button className="btn btn-sm btn-accent" disabled={isSaving} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'approved' }))}>
+                            <button className="btn btn-sm btn-accent" disabled={isSaving}
+                              onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'approved' }))}>
                               <CheckCircle2 size={14} /> Approve
                             </button>
                           )}
 
                           {userRole === 'seller' && sellerStatus !== 'rejected' && (
-                            <button className="btn btn-sm btn-secondary" disabled={isSaving} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'rejected' }))}>
+                            <button className="btn btn-sm btn-secondary" disabled={isSaving}
+                              onClick={() => runAction(u.id, () => updateUserAccess(u.id, { seller_status: 'rejected' }))}>
                               <XCircle size={14} /> Reject
                             </button>
                           )}
 
                           {accountStatus === 'suspended' ? (
-                            <button className="btn btn-sm btn-secondary" disabled={isSaving} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { account_status: 'active' }))}>
+                            <button className="btn btn-sm btn-secondary" disabled={isSaving}
+                              onClick={() => runAction(u.id, () => updateUserAccess(u.id, { account_status: 'active' }))}>
                               Reactivate
                             </button>
                           ) : (
-                            <button className="btn btn-sm btn-secondary" disabled={isSaving || userRole === 'admin'} onClick={() => runAction(u.id, () => updateUserAccess(u.id, { account_status: 'suspended' }))}>
+                            <button className="btn btn-sm btn-secondary" disabled={isSaving || userRole === 'admin'}
+                              onClick={() => runAction(u.id, () => updateUserAccess(u.id, { account_status: 'suspended' }))}>
                               Suspend
                             </button>
                           )}
 
-                          <button className="btn btn-sm" disabled={isSaving || userRole === 'admin'} onClick={() => handleDelete(u.id, displayName)} style={{ color: '#dc2626', border: '1.5px solid #fecaca', background: '#fff' }}>
+                          <button className="btn btn-sm" disabled={isSaving || userRole === 'admin'}
+                            onClick={() => handleDelete(u.id, displayName)}
+                            style={{ color: '#dc2626', border: '1.5px solid #fecaca', background: '#fff' }}>
                             <Trash2 size={14} /> Delete
                           </button>
                         </div>
@@ -212,6 +249,84 @@ export default function AdminUsers() {
         )}
         {!loading && filtered.length === 0 && <div className="admin-table-empty">No users found.</div>}
       </div>
+
+      {/* ── Add User Modal ── */}
+      {showAddModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 32, width: '100%', maxWidth: 460, boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Add New User</h3>
+              <button onClick={() => setShowAddModal(false)} style={{ color: 'var(--gray-400)' }}><X size={18} /></button>
+            </div>
+
+            {addError && (
+              <div style={{ background: '#fef2f2', color: '#dc2626', padding: '8px 12px', borderRadius: 8, fontSize: 13, marginBottom: 16 }}>
+                {addError}
+              </div>
+            )}
+
+            <form onSubmit={handleAddUser}>
+              {/* Full Name */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Full Name</label>
+                <input
+                  type="text"
+                  value={addForm.full_name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, full_name: e.target.value }))}
+                  placeholder="e.g. Juan dela Cruz"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--gray-200)', fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Email */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Email</label>
+                <input
+                  type="email"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="user@example.com"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--gray-200)', fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Password */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Password <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>(min. 8 characters)</span></label>
+                <input
+                  type="password"
+                  value={addForm.password}
+                  onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="••••••••"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--gray-200)', fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Role */}
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Role</label>
+                <select
+                  className="sort-select"
+                  value={addForm.role}
+                  onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value as Role }))}
+                  style={{ width: '100%', borderRadius: 8, padding: '9px 12px', fontSize: 14 }}
+                >
+                  {ROLES.map((r) => <option key={r} value={r}>{ROLE_META[r].label}</option>)}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)} disabled={addLoading}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-accent" disabled={addLoading}>
+                  {addLoading ? 'Creating…' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }

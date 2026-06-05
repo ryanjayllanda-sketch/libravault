@@ -176,6 +176,40 @@ export async function deleteUserAccount(userId: string) {
   if (error) throw error
 }
 
+export async function adminCreateUser(params: {
+  email: string
+  password: string
+  full_name: string
+  role: 'customer' | 'seller' | 'admin'
+}) {
+  // Use Supabase admin signUp — creates auth user + triggers handle_new_user to create profile
+  const { data, error } = await supabase.auth.signUp({
+    email: params.email,
+    password: params.password,
+    options: {
+      data: {
+        full_name: params.full_name,
+        role: params.role,
+      },
+    },
+  })
+  if (error) throw error
+  if (!data.user) throw new Error('User creation failed — no user returned.')
+
+  // Upsert profile to ensure role and name are set correctly
+  const { error: profileError } = await supabase.from('profiles').upsert({
+    id: data.user.id,
+    email: params.email,
+    full_name: params.full_name,
+    role: params.role,
+    seller_status: params.role === 'seller' ? 'approved' : null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'id' })
+  if (profileError) throw profileError
+
+  return data.user
+}
+
 export async function restockProduct(id: number, qty: number) {
   const { data: current, error: fetchErr } = await supabase
     .from('products')
