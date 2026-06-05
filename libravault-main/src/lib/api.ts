@@ -182,32 +182,17 @@ export async function adminCreateUser(params: {
   full_name: string
   role: 'customer' | 'seller' | 'admin'
 }) {
-  // Use Supabase admin signUp — creates auth user + triggers handle_new_user to create profile
-  const { data, error } = await supabase.auth.signUp({
-    email: params.email,
-    password: params.password,
-    options: {
-      data: {
-        full_name: params.full_name,
-        role: params.role,
-      },
-    },
+  // Use SECURITY DEFINER RPC to create user directly in auth.users + profiles
+  // bypasses email confirmation requirement
+  const { data, error } = await supabase.rpc('admin_create_user', {
+    p_email:     params.email,
+    p_password:  params.password,
+    p_full_name: params.full_name,
+    p_role:      params.role,
   })
-  if (error) throw error
-  if (!data.user) throw new Error('User creation failed — no user returned.')
-
-  // Upsert profile to ensure role and name are set correctly
-  const { error: profileError } = await supabase.from('profiles').upsert({
-    id: data.user.id,
-    email: params.email,
-    full_name: params.full_name,
-    role: params.role,
-    seller_status: params.role === 'seller' ? 'approved' : null,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' })
-  if (profileError) throw profileError
-
-  return data.user
+  if (error) throw new Error(error.message)
+  if (!data)  throw new Error('User creation failed — no user ID returned.')
+  return data as string
 }
 
 export async function restockProduct(id: number, qty: number) {
