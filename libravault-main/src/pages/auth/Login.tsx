@@ -92,7 +92,7 @@ export default function Login() {
               <label className="form-label" htmlFor="password">Password</label>
               <Link to="/forgot-password" style={{ fontSize: 12, color: 'var(--gray-500)' }}>Forgot password?</Link>
             </div>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', width: '100%' }}>
               <input
                 id="password" type={showPw ? 'text' : 'password'} className="form-input"
                 value={password} onChange={(e) => setPassword(e.target.value)}
