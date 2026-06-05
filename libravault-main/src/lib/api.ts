@@ -182,16 +182,14 @@ export async function adminCreateUser(params: {
   full_name: string
   role: 'customer' | 'seller' | 'admin'
 }) {
-  // Use SECURITY DEFINER RPC to create user directly in auth.users + profiles
-  // bypasses email confirmation requirement
+  // Use the admin_create_user RPC (SECURITY DEFINER, inserts into auth.users + profiles)
   const { data, error } = await supabase.rpc('admin_create_user', {
-    p_email:     params.email,
+    p_email:     params.email.trim(),
     p_password:  params.password,
-    p_full_name: params.full_name,
+    p_full_name: params.full_name.trim(),
     p_role:      params.role,
   })
   if (error) throw new Error(error.message)
-  if (!data)  throw new Error('User creation failed — no user ID returned.')
   return data as string
 }
 
