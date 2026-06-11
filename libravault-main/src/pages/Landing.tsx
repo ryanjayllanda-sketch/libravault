@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { BookOpen, Download, ShieldCheck, Smartphone } from 'lucide-react'
 import './Landing.css'
 
-const APK_URL = 'https://expo.dev/artifacts/eas/3xi2XmTLWytZrGRCMVyzQB.apk'
+const APK_URL = 'https://expo.dev/artifacts/eas/kkMUBjPeBCnrRHsV9ojnPA.apk'
 
 export default function Landing() {
   return (
